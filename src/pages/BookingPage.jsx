@@ -1,9 +1,19 @@
 import { useState } from "react";
 import BookingCalendar from "../components/BookingCalendar";
 import BookingContactForm from "../components/BookingContactForm";
-import BookingOptions from "../components/BookingOptions";
+import BookingOptions, { isHourAvailable } from "../components/BookingOptions";
 import BookingSelectionSummary from "../components/BookingSelectionSummary";
 import BookingSuccess from "../components/BookingSuccess";
+
+const bookedPatterns = [
+  [11, 17, 20, 23],
+  [12, 13, 18],
+  [14, 19, 21],
+  [11, 15, 16, 22],
+  [13, 18, 19, 24],
+];
+const getBookedHours = (year, monthIndex, day) =>
+  day ? bookedPatterns[(year + monthIndex + day) % bookedPatterns.length] : [];
 
 export default function BookingPage() {
   const [month, setMonth] = useState(new Date(2026, 9, 1));
@@ -13,7 +23,10 @@ export default function BookingPage() {
   const [time, setTime] = useState(null);
   const [booking, setBooking] = useState(null);
   const changeMonth = (step) => {
-    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + step, 1));
+    setMonth(
+      (current) =>
+        new Date(current.getFullYear(), current.getMonth() + step, 1),
+    );
     setDate(null);
     setSelectedMonth(null);
     setTime(null);
@@ -24,28 +37,59 @@ export default function BookingPage() {
     setTime(null);
   };
   const sessionComplete = Boolean(date && duration && time);
-  const selectedDate = date && selectedMonth
-    ? (() => {
-        const [year, monthIndex] = selectedMonth.split("-").map(Number);
-        return new Date(year, monthIndex, date);
-      })()
-    : null;
-  const dateLabel = selectedDate?.toLocaleDateString("en-US", { month: "short", day: "numeric" }) ?? null;
-  const submitBooking = (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const selectedDate = date && selectedMonth
+  const selectedDate =
+    date && selectedMonth
       ? (() => {
           const [year, monthIndex] = selectedMonth.split("-").map(Number);
           return new Date(year, monthIndex, date);
         })()
       : null;
-    const dateLabel = selectedDate?.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) ?? "Date to be confirmed";
+  const dateLabel =
+    selectedDate?.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }) ?? null;
+  const bookedHours = selectedDate
+    ? getBookedHours(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate(),
+      )
+    : [];
+  const changeDuration = (value) => {
+    setDuration(value);
+    const length = parseInt(value, 10);
+    const startHour = time ? parseInt(time, 10) : null;
+    if (startHour !== null && !isHourAvailable(startHour, length, bookedHours))
+      setTime(null);
+  };
+  const submitBooking = (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const selectedDate =
+      date && selectedMonth
+        ? (() => {
+            const [year, monthIndex] = selectedMonth.split("-").map(Number);
+            return new Date(year, monthIndex, date);
+          })()
+        : null;
+    const dateLabel =
+      selectedDate?.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }) ?? "Date to be confirmed";
     const name = form.get("name")?.toString().trim() || "GameStreet guest";
     const email = form.get("email")?.toString().trim() || "";
     const reference = `GS-${Date.now().toString(36).toUpperCase()}`;
     const summary = `LAN Party · ${dateLabel} · ${time ?? "Time to be confirmed"} · ${duration ?? "Duration to be confirmed"}`;
-    const payload = JSON.stringify({ type: "GameStreet booking", reference, name, email, summary });
+    const payload = JSON.stringify({
+      type: "GameStreet booking",
+      reference,
+      name,
+      email,
+      summary,
+    });
     setBooking({ reference, summary, payload });
   };
 
@@ -64,34 +108,42 @@ export default function BookingPage() {
         {booking ? (
           <BookingSuccess booking={booking} />
         ) : (
-        <div className="mx-auto grid max-w-[850px] grid-cols-[1fr_300px] items-start gap-[12%] max-[900px]:grid-cols-[1fr_270px] max-[900px]:gap-[7%] max-[600px]:grid-cols-1 max-[600px]:gap-7">
-          <section>
-            <span className="font-mono text-[9px] tracking-[.13em] text-booking-kicker">
-              GAMESTREET · GS1
-            </span>
-            <h1 className="font-display mb-2 mt-[3px] text-[clamp(36px,4vw,49px)] font-bold leading-[.98] tracking-[-.055em] text-booking-violet max-[600px]:text-[42px]">
-              Reserve your screen time
-            </h1>
-            <p className="mb-[14px] text-xs italic text-booking-subtle">
-              Choose a date to see available hours
-            </p>
-            <BookingCalendar
-              month={month}
-              selectedDate={date}
-              selectedMonth={selectedMonth}
-              onMonthChange={changeMonth}
-              onDateSelect={selectDate}
+          <div className="mx-auto grid max-w-[850px] grid-cols-[1fr_300px] items-start gap-[12%] max-[900px]:grid-cols-[1fr_270px] max-[900px]:gap-[7%] max-[600px]:grid-cols-1 max-[600px]:gap-7">
+            <section>
+              <span className="font-mono text-[9px] tracking-[.13em] text-booking-kicker">
+                GAMESTREET · GS1
+              </span>
+              <h1 className="font-display mb-2 mt-[3px] text-[clamp(36px,4vw,49px)] font-bold leading-[.98] tracking-[-.055em] text-booking-violet max-[600px]:text-[42px]">
+                Reserve your screen time
+              </h1>
+              <p className="mb-[14px] text-xs italic text-booking-subtle">
+                Choose a date to see available hours
+              </p>
+              <BookingCalendar
+                month={month}
+                selectedDate={date}
+                selectedMonth={selectedMonth}
+                onMonthChange={changeMonth}
+                onDateSelect={selectDate}
+              />
+              <BookingOptions
+                duration={duration}
+                time={time}
+                bookedHours={bookedHours}
+                onDurationChange={changeDuration}
+                onTimeChange={setTime}
+              />
+              <BookingSelectionSummary
+                dateLabel={dateLabel}
+                duration={duration}
+                time={time}
+              />
+            </section>
+            <BookingContactForm
+              onSubmit={submitBooking}
+              sessionComplete={sessionComplete}
             />
-            <BookingOptions
-              duration={duration}
-              time={time}
-              onDurationChange={setDuration}
-              onTimeChange={setTime}
-            />
-            <BookingSelectionSummary dateLabel={dateLabel} duration={duration} time={time} />
-          </section>
-          <BookingContactForm onSubmit={submitBooking} sessionComplete={sessionComplete} />
-        </div>
+          </div>
         )}
         <footer className="absolute bottom-[19px] left-[7%] right-[7%] flex justify-between font-mono text-[8px] tracking-[.1em] text-booking-footer max-[600px]:text-[7px]">
           <span>HIGH SCORES & GOOD COMPANY</span>
